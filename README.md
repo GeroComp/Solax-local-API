@@ -4,6 +4,21 @@
 
 # <img src="custom_components/solax_local_api/images/icon.png" alt="SolaX Logo" width="30"/> SolaX Inverter Local API
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![version](https://img.shields.io/github/v/release/GeroComp/solax_local_api?style=for-the-badge)](https://github.com/GeroComp/solax_local_api/releases)
+[![License](https://img.shields.io/github/license/GeroComp/solax_local_api?style=for-the-badge)](LICENSE)
+
+---
+
+## 🚀 First Public Release
+
+- Core features:
+  - Local API integration for SolaX inverters
+  - Basic sensor support (status, power, energy)
+  - Compatible with Home Assistant via custom component
+- Ready for testing and community feedback
+
+
 
 
 Tato integrace umožňuje lokální monitorování střídače **SolaX Hybrid G4** v Home Assistant.  
