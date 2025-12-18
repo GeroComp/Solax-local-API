@@ -49,7 +49,7 @@ class SolaxUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Chyba komunikace: {err}")
 
 class SolaxSensor(SensorEntity):
-    """Senzor Solax s podporou Energy Dashboardu a Firmware."""
+    """Senzor Solax s podporou firmware a diagnostiky."""
 
     def __init__(self, coordinator, sensor_key, info, entry):
         self.coordinator = coordinator
@@ -61,7 +61,7 @@ class SolaxSensor(SensorEntity):
         self._attr_unique_id = f"solax_{sensor_key}_{entry.entry_id}"
         self._attr_native_unit_of_measurement = info[1]
         
-        # --- Nastavení pro Energy Dashboard ---
+        # --- Nastavení Device Class a State Class ---
         unit = info[1]
         self._attr_device_class = info[2]
         
@@ -71,9 +71,9 @@ class SolaxSensor(SensorEntity):
         elif unit == "W":
             self._attr_state_class = SensorStateClass.MEASUREMENT
             self._attr_device_class = SensorDeviceClass.POWER
-
-        # Firmware a SN označíme jako diagnostické entity
-        if sensor_key in ["firmware", "inverter_sn", "type", "module_sn"]:
+        
+        # Kategorie pro servisní informace
+        if sensor_key in ["firmware", "inverter_sn", "type"]:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
         self._attr_device_info = DeviceInfo(
@@ -90,17 +90,14 @@ class SolaxSensor(SensorEntity):
         
         res = self.coordinator.data
         idx, factor, dtype = self._info[3], self._info[4], self._info[5]
-        
-        # Specifické načtení verze firmware (dtype 8), která není v poli 'Data'
-        if dtype == 8:
-            return res.get("ver", "Neznámá")
 
-        # Pro ostatní senzory potřebujeme pole 'Data'
+        # Speciální případ pro Firmware (dtype 8) - čte z res['ver']
+        if dtype == 8:
+            return res.get("ver")
+
+        # Pro ostatní senzory čteme z polí Data nebo Information
         data = res.get("Data", [])
         info_field = res.get("Information", [])
-        
-        if not data and dtype != 7:
-            return None
 
         try:
             val = None
@@ -108,41 +105,16 @@ class SolaxSensor(SensorEntity):
             elif dtype == 1: # Signed
                 val = data[idx]
                 if val > 32767: val -= 65536
-            elif dtype == 2: # Long (součet dvou registrů)
+            elif dtype == 2: # Long (32-bit)
                 val = (data[idx[0]] * 65536) + data[idx[1]]
             elif dtype == 3: # Textové režimy
                 raw = data[idx]
                 return SOLAX_MODES.get(raw, f"Neznámý ({raw})") if self._key == "mode" else SOLAX_STATES.get(raw, f"Neznámý ({raw})")
-            elif dtype == 4: # Součet PV1 + PV2
+            elif dtype == 4: # PV1 + PV2
                 val = data[idx[0]] + data[idx[1]]
             elif dtype == 5: # BMS Status
                 return "OK" if data[idx] == 1 else "Chyba"
-            elif dtype == 7: # Informační pole (Inverter SN apod.)
-                return info_field[idx] if idx < len(info_field) else None
+            elif dtype == 7: # Informační pole (Sériová čísla)
+                return info_field[idx]
 
-            if val is not None:
-                return round(val * factor, 2)
-        except Exception as e:
-            _LOGGER.debug("Chyba při čtení senzoru %s: %s", self._key, e)
-            return None
-        return None
-
-    @property
-    def icon(self):
-        """Dynamické ikony."""
-        if "firmware" in self._key: return "mdi:software-patch"
-        if "pv" in self._key: return "mdi:solar-power"
-        if "battery_soc" in self._key: return "mdi:battery-80"
-        if "grid" in self._key: return "mdi:transmission-tower"
-        return super().icon
-
-    @property
-    def available(self):
-        return self.coordinator.last_update_success
-
-    async def async_added_to_hass(self):
-        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
-
-    @property
-    def should_poll(self):
-        return False
+            if val is
