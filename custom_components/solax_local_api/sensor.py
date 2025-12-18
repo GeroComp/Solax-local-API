@@ -3,12 +3,15 @@ from datetime import timedelta
 import async_timeout
 import aiohttp
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorEntity, 
+    SensorStateClass, 
+    SensorDeviceClass
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfPower, UnitOfEnergy, PERCENTAGE, UnitOfTemperature, UnitOfElectricPotential, UnitOfElectricCurrent
 
-# Používáme relativní import, aby přejmenování složky nezpůsobilo chybu
 from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,19 +59,13 @@ class SolaxSensor(SensorEntity):
         self._key = sensor_key
         self._info = info
         
-        # Interní ID entity v Home Assistantu
         self.entity_id = f"sensor.solax_api_{sensor_key}"
         self._attr_name = info[0]
-        # Unikátní ID pro možnost editace v UI
         self._attr_unique_id = f"solax_local_api_{sensor_key}_{entry.entry_id}"
         self._attr_native_unit_of_measurement = info[1]
-        self._attr_device_class = info[2]
-
-        # PODPORA PRO ENERGY DASHBOARD
-        if info[1] == "kWh":
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        elif info[1] in ["W", "V", "A", "%", "°C"]:
-            self._attr_state_class = SensorStateClass.MEASUREMENT
+        
+        # Automatické nastavení Device Class a State Class pro Energy Dashboard
+        self._setup_energy_attributes(info[1], info[2])
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -82,24 +79,60 @@ class SolaxSensor(SensorEntity):
         if sensor_key in ["inverter_sn", "type", "nominal_power", "battery_bms"]:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
+    def _setup_energy_attributes(self, unit, d_class):
+        """Konfigurace atributů pro správné zobrazení v Energy Dashboardu."""
+        self._attr_device_class = d_class
+        
+        if unit == "kWh":
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_device_class = SensorDeviceClass.ENERGY
+        elif unit in ["W", "kW"]:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_device_class = SensorDeviceClass.POWER
+        elif unit in ["V", "A", "%", "°C"]:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            if unit == "V": self._attr_device_class = SensorDeviceClass.VOLTAGE
+            if unit == "A": self._attr_device_class = SensorDeviceClass.CURRENT
+            if unit == "%": self._attr_device_class = SensorDeviceClass.BATTERY if "soc" in self._key else None
+            if unit == "°C": self._attr_device_class = SensorDeviceClass.TEMPERATURE
+
     @property
     def icon(self):
-        """Dynamické ikony podle hodnoty."""
+        """Dynamické ikony podle aktuálního stavu."""
         val = self.native_value
-        if "pv_power" in self._key or "pv1" in self._key or "pv2" in self._key:
+        if val is None: return "mdi:help-circle-outline"
+
+        # FVE Panely
+        if any(x in self._key for x in ["pv_power", "pv1", "pv2"]):
             return "mdi:solar-power" if (isinstance(val, (int, float)) and val > 0) else "mdi:solar-power-variant-outline"
         
-        if self._key == "battery_soc":
-            if val is None: return "mdi:battery-unknown"
+        # Baterie (SOC)
+        if "battery_soc" in self._key:
             if val > 90: return "mdi:battery"
-            if val > 20: return "mdi:battery-medium"
-            return "mdi:battery-low"
-            
-        if self._key == "grid_power":
-            if val is None or val == 0: return "mdi:transmission-tower"
-            return "mdi:transmission-tower-export" if val > 0 else "mdi:transmission-tower-import"
+            if val > 60: return "mdi:battery-70"
+            if val > 40: return "mdi:battery-50"
+            if val > 15: return "mdi:battery-20"
+            return "mdi:battery-alert"
 
-        return super().icon
+        # Baterie (Nabíjení/Vybíjení)
+        if "battery_power" in self._key:
+            if val > 0: return "mdi:battery-arrow-up" # Nabíjení
+            if val < 0: return "mdi:battery-arrow-down" # Vybíjení
+            return "mdi:battery-lock"
+
+        # Síť (Grid)
+        if "grid_power" in self._key:
+            if val > 0: return "mdi:transmission-tower-export" # Přetok do sítě
+            if val < 0: return "mdi:transmission-tower-import" # Odběr ze sítě
+            return "mdi:transmission-tower"
+
+        # Stav střídače
+        if self._key == "status":
+            if val == "Normal": return "mdi:check-circle-outline"
+            if val == "Fault": return "mdi:alert-circle-outline"
+            return "mdi:pause-circle-outline"
+
+        return self._info[6] if len(self._info) > 6 else super().icon
 
     @property
     def available(self):
@@ -116,34 +149,30 @@ class SolaxSensor(SensorEntity):
     def native_value(self):
         if not self.coordinator.data: return None
         res = self.coordinator.data
-        data, info_field = res.get("Data", []), res.get("Information", [])
+        data = res.get("Data", [])
+        info_field = res.get("Information", [])
+        
+        # Index, Faktor, Typ dat
         idx, factor, dtype = self._info[3], self._info[4], self._info[5]
 
         try:
             val = None
-            if dtype == 0: 
+            if dtype == 0: # Standardní Unsigned Int
                 val = data[idx]
-            elif dtype == 1:
+            elif dtype == 1: # Signed Int (pro záporné hodnoty jako Grid Power)
                 val = data[idx]
                 if val > 32767: val -= 65536
-            elif dtype == 2: 
+            elif dtype == 2: # Double Word (32-bit)
                 val = (data[idx[0]] * 65536) + data[idx[1]]
-            elif dtype == 3:
+            elif dtype == 3: # Textové stavy (Mode/Status)
                 raw = data[idx]
                 if self._key == "mode": return SOLAX_MODES.get(raw, f"Neznámý ({raw})")
                 return SOLAX_STATES.get(raw, f"Neznámý ({raw})")
-            elif dtype == 4: 
-                val = data[idx[0]] + data[idx[1]]
-            elif dtype == 5: 
-                return "OK" if data[idx] == 1 else "Chyba"
-            elif dtype == 6: 
-                return "X3-Hybrid G4" if res.get("type") == 14 else f"Jiný ({res.get('type')})"
-            elif dtype == 7: 
+            elif dtype == 7: # Informační pole (Sériová čísla)
                 return info_field[idx]
             
             if val is not None:
                 return round(val * factor, 2)
-            return None
         except Exception as e:
             _LOGGER.error("Chyba při parsování dat pro %s: %s", self._key, e)
-            return None
+        return None
