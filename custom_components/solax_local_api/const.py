@@ -1,88 +1,133 @@
-"""Constants for the SolaX Local API integration."""
+import logging
+from datetime import timedelta
+import async_timeout
+import aiohttp
 
-# Změněno z "solax_local" na "solax_local_api"
-DOMAIN = "solax_local_api"
+from homeassistant.components.sensor import (
+    SensorEntity, 
+    SensorStateClass, 
+    SensorDeviceClass
+)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.const import EntityCategory
 
-# Mapování režimů pro textové senzory
-SOLAX_MODES = {
-    0: "Self Use Mode", 
-    1: "Force Time Use", 
-    2: "Back Up Mode", 
-    3: "Feed-in Priority"
-}
+from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES
 
-SOLAX_STATES = {
-    0: "Waiting", 1: "Checking", 2: "Normal", 3: "Off", 
-    4: "Permanent Fault", 5: "Updating", 6: "EPS Check", 
-    7: "EPS Mode", 8: "Self Test", 9: "Idle", 10: "Standby"
-}
+_LOGGER = logging.getLogger(__name__)
 
-# Kompletní tabulka všech 35+ senzorů
-# Formát: "id": ["Název", "Jednotka", "Device_Class", "Index", "Koeficient", "Typ_dat"]
-# Typy dat: 0=normal, 1=signed (+/-), 2=long (součet dvou registrů), 3=text/special
-SENSOR_TYPES = {
-    # --- AC Podrobnosti ---
-    "acu1": ["L1 Voltage", "V", "voltage", 0, 0.1, 0],
-    "acu2": ["L2 Voltage", "V", "voltage", 1, 0.1, 0],
-    "acu3": ["L3 Voltage", "V", "voltage", 2, 0.1, 0],
-    "aci1": ["L1 Current", "A", "current", 3, 0.1, 1],
-    "aci2": ["L2 Current", "A", "current", 4, 0.1, 1],
-    "aci3": ["L3 Current", "A", "current", 5, 0.1, 1],
-    "acp1": ["L1 Power", "W", "power", 6, 1, 1],
-    "acp2": ["L2 Power", "W", "power", 7, 1, 1],
-    "acp3": ["L3 Power", "W", "power", 8, 1, 1],
-    "ac_power": ["Total AC Power", "W", "power", 9, 1, 1],
-    "acf1": ["L1 Frequency", "Hz", "frequency", 16, 0.01, 0],
-    "acf2": ["L2 Frequency", "Hz", "frequency", 17, 0.01, 0],
-    "acf3": ["L3 Frequency", "Hz", "frequency", 18, 0.01, 0],
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Nastavení senzorů na základě konfigurace v UI."""
+    ip = entry.data["ip"]
+    pwd = entry.data["password"]
+    scan_interval = entry.data.get("scan_interval", 10)
 
-    # --- PV Podrobnosti ---
-    "pv1u": ["PV1 Voltage", "V", "voltage", 10, 0.1, 0],
-    "pv2u": ["PV2 Voltage", "V", "voltage", 11, 0.1, 0],
-    "pv1i": ["PV1 Current", "A", "current", 12, 0.1, 0],
-    "pv2i": ["PV2 Current", "A", "current", 13, 0.1, 0],
-    "pv1p": ["PV1 Power", "W", "power", 14, 1, 0],
-    "pv2p": ["PV2 Power", "W", "power", 15, 1, 0],
-    "pv_power": ["Total PV Power", "W", "power", (14, 15), 1, 4], # Speciální typ 4: součet 14+15
+    coordinator = SolaxUpdateCoordinator(hass, ip, pwd, scan_interval)
+    await coordinator.async_config_entry_first_refresh()
 
-    # --- Baterie ---
-    "battery_voltage": ["Battery Voltage", "V", "voltage", 39, 0.01, 0],
-    "battery_current": ["Battery Current", "A", "current", 40, 0.01, 1],
-    "battery_power": ["Battery Power", "W", "power", 41, 1, 1],
-    "battery_soc": ["Battery SoC", "%", None, 103, 1, 0],
-    "battery_remain": ["Battery Remain Energy", "kWh", "energy", 106, 0.1, 0],
-    "battery_temperature": ["Battery Temperature", "°C", "temperature", 105, 1, 0],
-    "battery_bms": ["Battery BMS status", None, None, 45, 1, 5], # Speciální typ 5: OK/Fail
+    entities = [SolaxSensor(coordinator, key, info, entry) for key, info in SENSOR_TYPES.items()]
+    async_add_entities(entities)
 
-    # --- Souhrny a Statistika ---
-    "grid_power": ["Feed-in Power", "W", "power", 34, 1, 1],
-    "consumption": ["Consumption", "W", "power", 47, 1, 1],
-    "energy_total": ["Energy total", "kWh", "energy", (69, 68), 0.1, 2],
-    
-    # --- Dnešní statistiky ---
-    "grid_out_today": ["Grid out today", "kWh", "energy", 90, 0.01, 0],
-    "grid_in_today": ["Grid in today", "kWh", "energy", 92, 0.01, 0],
-    "battery_out_today": ["Battery discharge today", "kWh", "energy", 78, 0.1, 0],
-    "battery_in_today": ["Battery charge today", "kWh", "energy", 79, 0.1, 0],
-    "energy_today": ["Energy today", "kWh", "energy", 82, 0.1, 0],
-    "energy_bat_today": ["Energy incl battery today", "kWh", "energy", 70, 0.1, 0],
+class SolaxUpdateCoordinator(DataUpdateCoordinator):
+    """Třída pro stahování dat."""
+    def __init__(self, hass, ip, pwd, scan_interval):
+        super().__init__(
+            hass, _LOGGER, name="Solax Data",
+            update_interval=timedelta(seconds=scan_interval),
+        )
+        self.ip = ip
+        self.pwd = pwd
 
-    # --- Celkové hodnoty pro Energy Panel ---
-    "solar_total": ["Solar energy total", "kWh", "energy", (81, 80), 0.1, 2],
-    "grid_out_total": ["Grid out total", "kWh", "energy", (87, 86), 0.01, 2],
-    "grid_in_total": ["Grid in total", "kWh", "energy", (89, 88), 0.01, 2],
-    "consumption_total": ["Consumption total", "kWh", "energy", 88, 0.01, 0],
-    "battery_out_total": ["Battery discharge total", "kWh", "energy", (75, 74), 0.1, 2],
-    "battery_in_total": ["Battery charge total", "kWh", "energy", (77, 76), 0.1, 2],
+    async def _async_update_data(self):
+        url = f"http://{self.ip}/"
+        payload = f"optType=ReadRealTimeData&pwd={self.pwd}"
+        try:
+            async with aiohttp.ClientSession() as session, async_timeout.timeout(5):
+                async with session.post(url, data=payload) as response:
+                    return await response.json(content_type=None)
+        except Exception as err:
+            raise UpdateFailed(f"Chyba komunikace: {err}")
 
-    # --- Módy a Informace o střídači ---
-    "mode": ["Battery Operation Mode", None, None, 168, 1, 3],
-    "state": ["Inverter Operation Mode", None, None, 19, 1, 3],
-    "type": ["Inverter Type", None, None, "type", 1, 6], # Speciální typ 6: Attr střídače
-    "inverter_sn": ["Inverter SN", None, None, 2, 1, 7], # Speciální typ 7: Information[2]
-    "nominal_power": ["Inverter Nominal Power", "kW", None, 0, 1, 7], # Information[0]
+class SolaxSensor(SensorEntity):
+    """Senzor Solax s podporou Energy Dashboardu."""
 
-    # --- Testovací parametry ---
-    "inverter_temperature_inner": ["Inverter Temperature inner", "°C", "temperature", 46, 1, 0],
-    "inverter_temperature": ["Inverter Temperature", "°C", "temperature", 54, 1, 0],
-}
+    def __init__(self, coordinator, sensor_key, info, entry):
+        self.coordinator = coordinator
+        self._key = sensor_key
+        self._info = info
+        
+        self.entity_id = f"sensor.solax_{sensor_key}"
+        self._attr_name = info[0]
+        self._attr_unique_id = f"solax_{sensor_key}_{entry.entry_id}"
+        self._attr_native_unit_of_measurement = info[1]
+        
+        # --- Nastavení pro Energy Dashboard ---
+        unit = info[1]
+        self._attr_device_class = info[2]
+        
+        if unit == "kWh":
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_device_class = SensorDeviceClass.ENERGY
+        elif unit == "W":
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_device_class = SensorDeviceClass.POWER
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="SolaX Inverter",
+            manufacturer="SolaX Power",
+            model="X3-Hybrid G4",
+        )
+
+    @property
+    def native_value(self):
+        if not self.coordinator.data or "Data" not in self.coordinator.data:
+            return None
+        
+        res = self.coordinator.data
+        data = res.get("Data", [])
+        info_field = res.get("Information", [])
+        idx, factor, dtype = self._info[3], self._info[4], self._info[5]
+
+        try:
+            val = None
+            if dtype == 0: val = data[idx] # Unsigned
+            elif dtype == 1: # Signed
+                val = data[idx]
+                if val > 32767: val -= 65536
+            elif dtype == 2: # Long (součet dvou registrů)
+                val = (data[idx[0]] * 65536) + data[idx[1]]
+            elif dtype == 3: # Textové režimy
+                raw = data[idx]
+                return SOLAX_MODES.get(raw, f"Neznámý ({raw})") if self._key == "mode" else SOLAX_STATES.get(raw, f"Neznámý ({raw})")
+            elif dtype == 4: # Součet PV1 + PV2
+                val = data[idx[0]] + data[idx[1]]
+            elif dtype == 5: # BMS Status
+                return "OK" if data[idx] == 1 else "Chyba"
+            elif dtype == 7: # Informační pole
+                return info_field[idx]
+
+            if val is not None:
+                return round(val * factor, 2)
+        except Exception:
+            return None
+        return None
+
+    @property
+    def icon(self):
+        """Dynamické ikony."""
+        if "pv" in self._key: return "mdi:solar-power"
+        if "battery_soc" in self._key: return "mdi:battery-80"
+        if "grid" in self._key: return "mdi:transmission-tower"
+        return super().icon
+
+    @property
+    def available(self):
+        return self.coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def should_poll(self):
+        return False
