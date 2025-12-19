@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavení SolaX Local API",
+        "description": "Zadejte IP adresu vašeho střídače a heslo pro místní API.",
+        "data": {
+          "ip": "IP Adresa",
+          "password": "Heslo (API PWD)",
+          "scan_interval": "Interval obnovy (sekundy)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nepodařilo se připojit ke střídači. Zkontrolujte IP adresu.",
+      "invalid_auth": "Neplatné heslo nebo střídač nevrací data.",
+      "unknown": "Došlo k neznámé chybě."
+    },
+    "abort": {
+      "already_configured": "Toto zařízení je již nastaveno."
+    }
+  }
+}
