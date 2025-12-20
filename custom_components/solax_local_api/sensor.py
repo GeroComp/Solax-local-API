@@ -12,7 +12,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.const import EntityCategory
 
-from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES
+# Importování mapovacích tabulek z const.py
+from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES, SOLAX_INVERTER_TYPES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,12 +81,10 @@ class SolaxSensor(SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Dynamické informace o zařízení – načítá FW a SN z API."""
-        # 1. Získání verze firmware
         fw_version = "Načítání..."
         if self.coordinator.data:
             fw_version = self.coordinator.data.get("ver", "Neznámý")
 
-        # 2. Získání sériového čísla (SN) z pole Information[2]
         sn_value = None
         if self.coordinator.data:
             info_field = self.coordinator.data.get("Information", [])
@@ -98,7 +97,7 @@ class SolaxSensor(SensorEntity):
             manufacturer="SolaX Power",
             model="X3-Hybrid G4",
             sw_version=fw_version,
-            serial_number=sn_value, # Přidá SN do hlavičky karty zařízení
+            serial_number=sn_value,
         )
 
     @property
@@ -126,7 +125,7 @@ class SolaxSensor(SensorEntity):
                 if val is not None and val > 32767: val -= 65536
             elif dtype == 2: # Long
                 val = (data[idx[0]] * 65536) + data[idx[1]]
-            elif dtype == 3: # Textové režimy
+            elif dtype == 3: # Textové režimy (Provozní stavy)
                 raw = data[idx]
                 if self._key == "mode":
                     return SOLAX_MODES.get(raw, f"Neznámý ({raw})")
@@ -135,8 +134,11 @@ class SolaxSensor(SensorEntity):
                 val = data[idx[0]] + data[idx[1]]
             elif dtype == 5: # BMS Status
                 return "OK" if data[idx] == 1 else "Chyba"
-            elif dtype == 7: # Info field (SN)
+            elif dtype == 7: # Info field (Sériové číslo)
                 return info_field[idx] if idx < len(info_field) else None
+            elif dtype == 9: # Info field (Mapování typu střídače)
+                raw = info_field[idx] if idx < len(info_field) else None
+                return SOLAX_INVERTER_TYPES.get(raw, f"Model {raw}")
 
             if val is not None:
                 return round(val * factor, 2)
@@ -157,6 +159,7 @@ class SolaxSensor(SensorEntity):
         if "inverter_sn" in key or "sn" in key: return "mdi:barcode-scan"
         if "temperature" in key: return "mdi:thermometer"
         if "mode" in key or "state" in key: return "mdi:cog-box"
+        if "type" in key: return "mdi:information-outline"
         return super().icon
 
     @property

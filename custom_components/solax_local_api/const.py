@@ -16,8 +16,15 @@ SOLAX_STATES = {
     7: "EPS Mode", 8: "Self Test", 9: "Idle", 10: "Standby"
 }
 
+# Mapování typů střídačů (přidáno pro kód 14)
+SOLAX_INVERTER_TYPES = {
+    14: "X3-Hybrid-G4",
+    15: "X1-Hybrid-G4",
+}
+
 # Kompletní tabulka senzorů
 # Formát: "id": ["Název", "Jednotka", "Device_Class", "Index", "Koeficient", "Typ_dat"]
+# Typy dat: 0=Unsigned, 1=Signed, 2=Long, 3=Text(MODES/STATES), 4=PV sum, 5=BMS, 7=Info, 8=Firmware, 9=InverterType
 SENSOR_TYPES = {
     # --- AC Podrobnosti ---
     "acu1": ["L1 Voltage", "V", "voltage", 0, 0.1, 0],
@@ -69,14 +76,14 @@ SENSOR_TYPES = {
     "solar_total": ["Solar energy total", "kWh", "energy", (81, 80), 0.1, 2],
     "grid_out_total": ["Grid out total", "kWh", "energy", (87, 86), 0.01, 2],
     "grid_in_total": ["Grid in today total", "kWh", "energy", (89, 88), 0.01, 2],
-    "consumption_total": ["Consumption total", "kWh", "energy", (89, 88), 0.01, 2], # Opraven index na long
+    "consumption_total": ["Consumption total", "kWh", "energy", (89, 88), 0.01, 2],
     "battery_out_total": ["Battery discharge total", "kWh", "energy", (75, 74), 0.1, 2],
     "battery_in_total": ["Battery charge total", "kWh", "energy", (77, 76), 0.1, 2],
 
     # --- Módy a Informace o střídači ---
     "mode": ["Battery Operation Mode", None, None, 168, 1, 3],
     "state": ["Inverter Operation Mode", None, None, 19, 1, 3],
-    "type": ["Inverter Type", None, None, 2, 1, 7], # Opraven index na Information[2]
+    "type": ["Inverter Type", None, None, 1, 1, 9],             # Typ 9 pro Inverter Type mapování
     "inverter_sn": ["Inverter SN", None, None, 2, 1, 7], 
     "nominal_power": ["Inverter Nominal Power", "kW", None, 0, 1, 7],
     "firmware": ["SolaX Firmware Version", None, None, 0, 1, 8],
