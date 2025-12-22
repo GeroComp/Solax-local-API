@@ -6,7 +6,8 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![version](https://img.shields.io/github/v/release/GeroComp/Solax-local-API?style=for-the-badge)](https://github.com/GeroComp/Solax-local-API/releases)
-[![License](https://img.shields.io/github/license/GeroComp/Solax-local-API?style=for-the-badge)](LICENSE)
+![License](https://img.shields.io/github/license/GeroComp/Solax-local-API?style=for-the-badge)
+
 
 Tato integrace umožňuje lokální monitorování střídače **SolaX Hybrid G4** v Home Assistant.  
 Komunikace probíhá přímo přes lokální síť (LAN/WiFi), bez závislosti na cloudu a s bleskovou odezvou.
