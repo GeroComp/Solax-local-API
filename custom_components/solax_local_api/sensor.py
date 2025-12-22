@@ -1,6 +1,6 @@
 import logging
 from datetime import timedelta
-import async_timeout
+import async_timeout3
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.components.sensor import (
@@ -171,3 +171,4 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
         if "consumption" in key: return "mdi:home-lightning-bolt"
         if "temperature" in key: return "mdi:thermometer"
         return super().icon
+
