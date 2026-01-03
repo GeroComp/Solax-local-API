@@ -2,16 +2,12 @@
   "domain": "solax_local_api",
   "name": "SolaX Local API",
   "version": "0.1.7",
-  "documentation": "https://github.com/GeroComp/Solax-local-API.git",
+  "documentation": "https://github.com/GeroComp/Solax-local-API",
   "dependencies": [],
   "codeowners": ["@GeroComp"],
   "iot_class": "local_polling",
   "config_flow": true,
   "dhcp": [
-    {
-      "hostname": "solax*",
-      "macaddress": "E868E7*"
-    },
     {
       "hostname": "solax*"
     },

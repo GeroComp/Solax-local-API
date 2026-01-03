@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity
 )
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, CONF_HOST, CONF_PASSWORD # <--- PŘIDÁNO: Import konstant
 
 # Importování mapovacích tabulek z const.py
 from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES, SOLAX_INVERTER_TYPES
@@ -24,12 +24,22 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Nastavení senzorů na základě konfigurace v UI."""
-    ip = entry.data["ip"]
-    pwd = entry.data["password"]
+    # --- OPRAVA ZDE ---
+    # Původně: ip = entry.data["ip"] -> To způsobovalo pád, protože config_flow ukládá "host"
+    ip = entry.data[CONF_HOST]       
+    pwd = entry.data[CONF_PASSWORD]  
+    # ------------------
+    
     scan_interval = entry.data.get("scan_interval", 10)
 
     coordinator = SolaxUpdateCoordinator(hass, ip, pwd, scan_interval)
-    await coordinator.async_config_entry_first_refresh()
+    
+    # DŮLEŽITÉ: Pokud selže první připojení, nenecháme integraci spadnout, 
+    # ale načteme senzory jako "Nedostupné", aby to uživatel viděl.
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as ex:
+        _LOGGER.warning("Nepodařilo se navázat prvotní spojení se střídačem: %s", ex)
 
     entities = [SolaxSensor(coordinator, key, info, entry) for key, info in SENSOR_TYPES.items()]
     async_add_entities(entities)
