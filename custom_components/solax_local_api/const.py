@@ -16,7 +16,7 @@ SOLAX_STATES = {
     7: "EPS Mode", 8: "Self Test", 9: "Idle", 10: "Standby"
 }
 
-# Mapování typů střídačů (přidáno pro kód 14)
+# Mapování typů střídačů
 SOLAX_INVERTER_TYPES = {
     14: "X3-Hybrid-G4",
     15: "X1-Hybrid-G4",
@@ -65,8 +65,8 @@ SENSOR_TYPES = {
     "energy_total": ["Energy total", "kWh", "energy", (69, 68), 0.1, 2],
     
     # --- Dnešní statistiky ---
-    "grid_out_today": ["Grid out today", "kWh", "energy", 90, 0.01, 0],
-    "grid_in_today": ["Grid in today", "kWh", "energy", 92, 0.01, 0],
+    "grid_out_today": ["Grid Export Today", "kWh", "energy", 90, 0.01, 0],
+    "grid_in_today": ["Grid Import Today", "kWh", "energy", 92, 0.01, 0],
     "battery_out_today": ["Battery discharge today", "kWh", "energy", 78, 0.1, 0],
     "battery_in_today": ["Battery charge today", "kWh", "energy", 79, 0.1, 0],
     "energy_today": ["Energy today", "kWh", "energy", 82, 0.1, 0],
@@ -74,8 +74,8 @@ SENSOR_TYPES = {
 
     # --- Celkové hodnoty pro Energy Panel ---
     "solar_total": ["Solar energy total", "kWh", "energy", (81, 80), 0.1, 2],
-    "grid_out_total": ["Grid out total", "kWh", "energy", (87, 86), 0.01, 2],
-    "grid_in_total": ["Grid in today total", "kWh", "energy", (89, 88), 0.01, 2],
+    "grid_out_total": ["Grid Export Total", "kWh", "energy", (87, 86), 0.01, 2],
+    "grid_in_total": ["Grid Import Total", "kWh", "energy", (89, 88), 0.01, 2],
     "consumption_total": ["Consumption total", "kWh", "energy", (89, 88), 0.01, 2],
     "battery_out_total": ["Battery discharge total", "kWh", "energy", (75, 74), 0.1, 2],
     "battery_in_total": ["Battery charge total", "kWh", "energy", (77, 76), 0.1, 2],
@@ -83,7 +83,7 @@ SENSOR_TYPES = {
     # --- Módy a Informace o střídači ---
     "mode": ["Battery Operation Mode", None, None, 168, 1, 3],
     "state": ["Inverter Operation Mode", None, None, 19, 1, 3],
-    "type": ["Inverter Type", None, None, 1, 1, 9],             # Typ 9 pro Inverter Type mapování
+    "type": ["Inverter Type", None, None, 1, 1, 9],
     "inverter_sn": ["Inverter SN", None, None, 2, 1, 7], 
     "nominal_power": ["Inverter Nominal Power", "kW", None, 0, 1, 7],
     "firmware": ["SolaX Firmware Version", None, None, 0, 1, 8],

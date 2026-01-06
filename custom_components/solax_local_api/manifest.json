@@ -1,7 +1,7 @@
 {
   "domain": "solax_local_api",
   "name": "SolaX Local API",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "documentation": "https://github.com/GeroComp/Solax-local-API",
   "dependencies": [],
   "codeowners": ["@GeroComp"],

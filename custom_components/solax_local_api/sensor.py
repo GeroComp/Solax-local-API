@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity
 )
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.const import EntityCategory, CONF_HOST, CONF_PASSWORD # <--- PŘIDÁNO: Import konstant
+from homeassistant.const import EntityCategory, CONF_HOST, CONF_PASSWORD
 
 # Importování mapovacích tabulek z const.py
 from .const import DOMAIN, SENSOR_TYPES, SOLAX_MODES, SOLAX_STATES, SOLAX_INVERTER_TYPES
@@ -24,18 +24,13 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Nastavení senzorů na základě konfigurace v UI."""
-    # --- OPRAVA ZDE ---
-    # Původně: ip = entry.data["ip"] -> To způsobovalo pád, protože config_flow ukládá "host"
-    ip = entry.data[CONF_HOST]       
-    pwd = entry.data[CONF_PASSWORD]  
-    # ------------------
+    ip = entry.data[CONF_HOST]        
+    pwd = entry.data[CONF_PASSWORD]   
     
     scan_interval = entry.data.get("scan_interval", 10)
 
     coordinator = SolaxUpdateCoordinator(hass, ip, pwd, scan_interval)
     
-    # DŮLEŽITÉ: Pokud selže první připojení, nenecháme integraci spadnout, 
-    # ale načteme senzory jako "Nedostupné", aby to uživatel viděl.
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as ex:
@@ -87,6 +82,12 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = info[0]
         self._attr_unique_id = f"solax_{sensor_key}_{entry.entry_id}"
         self._attr_native_unit_of_measurement = info[1]
+
+        # --- OPRAVA NÁZVU (Rename pojistka) ---
+        if self._attr_name == "Grid in today total":
+            self._attr_name = "Grid Import Total"
+        elif self._attr_name == "Grid out today total": 
+            self._attr_name = "Grid Export Total"
         
         # Automatické nastavení DeviceClass a StateClass
         unit = info[1]
@@ -97,7 +98,6 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
             self._attr_state_class = SensorStateClass.MEASUREMENT
             self._attr_device_class = SensorDeviceClass.POWER
         elif unit == "%":
-            # Pro zobrazení ikony v hlavičce zařízení
             self._attr_device_class = SensorDeviceClass.BATTERY
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit == "V":
@@ -108,6 +108,9 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit == "°C":
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif unit == "Hz":
+            self._attr_device_class = SensorDeviceClass.FREQUENCY
             self._attr_state_class = SensorStateClass.MEASUREMENT
         
         # Diagnostické senzory
@@ -141,7 +144,6 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
             model=model_type,
             sw_version=fw_version,
             serial_number=sn_value,
-            # Tímto se aktivuje modré tlačítko/odkaz v Home Assistant UI
             configuration_url=f"http://{self.coordinator.ip}",
         )
 
@@ -183,10 +185,96 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
     def icon(self):
         """Přiřazení ikon."""
         key = self._key.lower()
+        name = (self._attr_name or "").lower()
+        val = self.native_value
+
+        # --- 1. DYNAMICKÉ IKONY (BATERIE) ---
+        if "battery_power" in key or "battery_current" in key:
+            if val is None: return "mdi:battery-unknown"
+            if val < 0: return "mdi:battery-arrow-down"
+            elif val > 0: return "mdi:battery-arrow-up-outline"
+            else: return "mdi:battery-off-outline"
+        
+        # --- 2. BATERIE - ZBÝVAJÍCÍ ENERGIE (vs 11.5 kWh) ---
+        if "remain" in key or "remain" in name:
+            BATTERY_CAPACITY_KWH = 11.5 
+            if val is None: return "mdi:battery-unknown"
+            try:
+                if float(val) > (BATTERY_CAPACITY_KWH / 2):
+                    return "mdi:battery-check"
+                else:
+                    return "mdi:battery-check-outline"
+            except (ValueError, TypeError):
+                return "mdi:battery-alert"
+
+        # --- 3. BATERIE - CHARGE / DISCHARGE ---
+        if "discharge" in key or "discharge" in name:
+            return "mdi:battery-arrow-down"
+        if "charge" in key or "charge" in name:
+            return "mdi:battery-arrow-up-outline"
+            
+        # --- 4. SPOTŘEBA DOMU (CONSUMPTION) ---
+        is_consumption = "consumption" in key or "consumption" in name
+        is_total = "total" in key or "total" in name
+
+        if is_consumption and is_total:
+            return "mdi:home-import-outline"
+        if is_consumption:
+            return "mdi:home-lightning-bolt"
+
+        # --- 5. ENERGIE VČETNĚ BATERIE ---
+        if "incl" in name and "battery" in name:
+            return "mdi:home-battery"
+
+        # --- 6. SÍŤ (GRID) - FEED-IN & IMPORT/EXPORT ---
+        if "feed" in key or "feed" in name:
+            if val is None: return "mdi:transmission-tower-off"
+            if val < 0: return "mdi:transmission-tower-export"
+            if val > 0: return "mdi:transmission-tower-import"
+            return "mdi:transmission-tower"
+
+        if "grid" in key and "in" in key:
+            return "mdi:transmission-tower-export"
+
+        if "grid" in key and "out" in key:
+            return "mdi:transmission-tower-import"
+
+        # --- 7. DYNAMICKÉ TEPLOTY (UPRAVENÁ LOGIKA) ---
+        if "temperature" in key:
+            if val is None: return "mdi:thermometer-off"
+            try:
+                temp = float(val)
+                
+                # Pokud je teplota přesně 0 a jde o střídač -> vypnuto (přeškrtnutý teploměr)
+                if temp == 0 and "inverter" in key: return "mdi:thermometer-off"
+
+                if temp < 0: return "mdi:thermometer-minus" # Pod 0
+                if temp < 30: return "mdi:thermometer-low"  # 0 - 30
+                if temp < 40: return "mdi:thermometer"      # 30 - 40
+                if temp < 60: return "mdi:thermometer-high" # 40 - 60
+                return "mdi:thermometer-alert"              # Nad 60
+            except (ValueError, TypeError):
+                return "mdi:thermometer"
+
+        # --- 8. DIAGNOSTIKA A INFO ---
+        if "sn" in key: return "mdi:barcode"
+        
+        if "firmware" in key: return "mdi:chip"
+        
+        if "type" in key: return "mdi:solar-power"
+        if "bms" in key: return "mdi:battery-heart-variant"
+        if "mode" in key or "state" in key: return "mdi:state-machine"
+        if "nominal" in key: return "mdi:lightning-bolt-circle"
+
+        # --- 9. OBECNÉ IKONY ---
         if "pv" in key: return "mdi:solar-power-variant"
         if "battery_soc" in key: return "mdi:battery-high"
+        
         if "battery" in key: return "mdi:battery-charging"
+        
         if "grid" in key: return "mdi:transmission-tower"
-        if "consumption" in key: return "mdi:home-lightning-bolt"
-        if "temperature" in key: return "mdi:thermometer"
+        
+        if "frequency" in key or "hz" in (self._attr_native_unit_of_measurement or ""): 
+            return "mdi:sine-wave"
+        
         return super().icon
