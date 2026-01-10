@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="custom_components/solax_local_api/images/logo.png" alt="SolaX Logo" width="200"/>
+  <img src="https://brands.home-assistant.io/_/solax_local_api/logo.png" alt="SolaX Logo" width="200"/>
 </p>
 
-# <img src="custom_components/solax_local_api/images/icon.png" alt="SolaX Logo" width="30"/> SolaX Inverter Local API
+# <img src="https://brands.home-assistant.io/_/solax_local_api/icon.png" alt="SolaX Icon" width="30"/> SolaX Inverter Local API
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![version](https://img.shields.io/github/v/release/GeroComp/Solax-local-API?style=for-the-badge)](https://github.com/GeroComp/Solax-local-API/releases)
