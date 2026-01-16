@@ -43,8 +43,8 @@ class SolaxIntervalDiagnostic(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"solax_interval_diagnostic_{entry.entry_id}"
         self.entity_id = f"sensor.solax_interval_diagnostic"
         
-        # DEFINICE IKONY PŘÍMO V INITU (Nejspolehlivější metoda)
-        self._attr_icon = "mdi:refresh-circle-outline"
+        # DEFINICE IKONY PŘÍMO V INITU (Upraveno na timer-check-outline)
+        self._attr_icon = "mdi:timer-check-outline"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -310,12 +310,12 @@ class SolaxSensor(CoordinatorEntity, SensorEntity):
                 pass
 
             if "pv1" in key:
-                if "current" in key: return "mdi:current-dc"       
+                if "current" in key: return "mdi:current-dc"        
                 if "power" in key and is_night: return "mdi:solar-panel-large"
                 return "mdi:solar-power-variant-outline"
 
             if "pv2" in key:
-                if "current" in key: return "mdi:current-dc"       
+                if "current" in key: return "mdi:current-dc"        
                 if "power" in key and is_night: return "mdi:solar-panel"
                 return "mdi:solar-power-variant"
             
